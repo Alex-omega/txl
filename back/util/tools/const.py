@@ -3,6 +3,9 @@ API_ROOT = "/api/v1"
 PING = "/ping"
 LOGIN = "/login"
 REGISTER = "/register"
+VERIFY = "/verify"
+POST_TXL = "/post_txl"
+MAKE_ADMIN = "/make_admin"
 
 POST = ["POST"]
 
@@ -30,6 +33,7 @@ GET_PASSWD_ID = "SELECT e_passwd, userid, confirmed FROM user_basic_info WHERE u
 GET_ID = "SELECT userid FROM user_basic_info WHERE username = %s"
 
 UPDATE_TOKEN = "UPDATE user_token SET token = %s WHERE userid = %s"
+INSERT_TOOKEN = "INSERT INTO user_token (token) VALUES (' ')"
 
 INSERT_USER = "INSERT INTO user_basic_info (username, e_passwd, e_salt, schoolid) VALUES (%s, %s, %s, %s)"
 # 用于检查管理员权限
@@ -40,8 +44,15 @@ VERIFY_USER = "UPDATE user_basic_info SET confirmed = 1 WHERE userid = %s AND sc
 
 # 用于检查目标用户存在性和当前验证状态
 CHECK_USER_EXISTS = "SELECT confirmed FROM user_basic_info WHERE userid = %s AND schoolid = %s"
-GET_USER_BY_TOKEN = """
+GET_USER_FROM_TOKEN = """
     SELECT u.userid, u.username, u.vip_level 
+    FROM user_basic_info u
+    JOIN user_token t ON u.userid = t.userid
+    WHERE t.token = %s
+"""
+
+GET_USER_BY_TOKEN = """
+    SELECT u.userid, u.username, u.schoolid, u.confirmed, u.sent_txl
     FROM user_basic_info u
     JOIN user_token t ON u.userid = t.userid
     WHERE t.token = %s

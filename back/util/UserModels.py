@@ -1,4 +1,5 @@
 import pymysql
+import json
 from util.tools import functions
 from util.tools.const import *
 from util.passwd import *
@@ -6,19 +7,20 @@ from util.passwd import *
 connection = pymysql.connect(
     host = "127.0.0.1",
     user = "root",
-    password = mysql_passwd,
+    password = MYSQL_PASSWD,
     database = "hy_txl",
     )
 cursor = connection.cursor()
 
 class LoginUser:
-    def __init__(self, username: str, m_passwd: str, schoolid: str, device_hash: str):
+    def __init__(self, username: str, m_passwd: str, schoolid: str, device_hash=None):
         self.username = username
         self.m_passwd = m_passwd
         self.schoolid = schoolid
 
     def _login(self):
         # 获取用户的盐值
+        connection.ping()
         cursor.execute(GET_SALT, (self.username, self.schoolid,))
         result = cursor.fetchone()
         if not result:
@@ -54,7 +56,7 @@ class LoginUser:
             
             
 class RegisterUser:
-    def __init__(self, username: str, m_passwd: str, schoolid: str, device_hash: str):
+    def __init__(self, username: str, m_passwd: str, schoolid: str, device_hash=None):
         self.username = username
         self.m_passwd = m_passwd
         self.schoolid = schoolid
@@ -62,6 +64,7 @@ class RegisterUser:
         # self.security["device"] = device_hash
         
     def _register(self):
+        connection.ping()
         cursor.execute(IF_EXISTS, (self.username, self.schoolid, ))
         result = cursor.fetchone()
         if result:
@@ -73,9 +76,9 @@ class RegisterUser:
         cursor.execute(GET_ID, (self.username, ))
         userid = cursor.fetchone()[0]
         new_token = functions.random_str(64)
-        cursor.execute(UPDATE_TOKEN, (new_token, userid))
+        cursor.execute(INSERT_TOOKEN)
         connection.commit()
-        return 700, (userid, new_token, )
+        return 700, (userid, )
     
         
 class VerifyUser:
@@ -94,6 +97,7 @@ class VerifyUser:
         检查当前用户是否为管理员。
         :return: 如果是管理员，返回 True；否则返回 False。
         """
+        connection.ping()
         cursor.execute(CHECK_ADMIN, (self.admin_userid,))
         return cursor.fetchone() is not None
 
@@ -102,6 +106,7 @@ class VerifyUser:
         检查目标用户是否存在以及验证状态。
         :return: (status, data)
         """
+        connection.ping()
         cursor.execute(CHECK_USER_EXISTS, (self.target_userid, self.schoolid))
         result = cursor.fetchone()
         if result:
@@ -128,6 +133,7 @@ class VerifyUser:
             return 901, ()
 
         # 验证目标用户
+        connection.ping()
         cursor.execute(VERIFY_USER, (self.target_userid, self.schoolid))
         connection.commit()
         return 700, (self.target_userid,)
@@ -142,7 +148,8 @@ def get_user_from_token(token: str):
     """
     try:
         # 执行 SQL 查询
-        cursor.execute(GET_USER_BY_TOKEN, (token,))
+        connection.ping()
+        cursor.execute(GET_USER_FROM_TOKEN, (token,))
         user = cursor.fetchone()
 
         if user:
@@ -157,3 +164,81 @@ def get_user_from_token(token: str):
         # 处理任何异常，返回 None
         print(f"Error fetching user from token: {e}")
         return None
+    
+    
+class User:
+    @staticmethod
+    def get_user_from_token(token: str):
+        """
+        根据 token 获取用户信息。
+        """
+        connection.ping()
+        cursor.execute(GET_USER_BY_TOKEN, (token,))
+        user = cursor.fetchone()
+        if user:
+            return {
+                "userid": user[0],
+                "username": user[1],
+                "schoolid": user[2],
+                "confirmed": user[3],
+                "sent_txl": user[4],
+            }
+        return None
+
+    @staticmethod
+    def post_txl(userid: int, content: dict, is_anonymous: bool) -> tuple:
+        """
+        插入同学录信息，并更新用户的 `sent_txl` 字段。
+        :param userid: 用户 ID
+        :param content: 同学录内容（JSON 格式）
+        :param is_anonymous: 是否匿名
+        :return: (status, message)
+        """
+        try:
+            # 插入同学录内容
+            connection.ping()
+            cursor.execute(
+                "INSERT INTO txl_2025 (publisher_id, content, is_anonymous) VALUES (%s, %s, %s)",
+                (userid, json.dumps(content), is_anonymous),
+            )
+
+            # 更新用户表中的 `sent_txl` 字段
+            cursor.execute("UPDATE user_basic_info SET sent_txl = 1 WHERE userid = %s", (userid,))
+            connection.commit()
+            return 700, "TXL Posted Successfully"
+        except pymysql.Error as e:
+            connection.rollback()
+            return 500, str(e)
+        
+
+class AdminAuth:
+    @staticmethod
+    def get_random_key() -> tuple:
+        """
+        获取当前有效的随机密码。
+        :return: (status, random_key) 或 (status, None)
+        """
+        connection.ping()
+        cursor.execute("SELECT random_key, expires_at FROM admin_auth WHERE id=1")
+        result = cursor.fetchone()
+        if not result:
+            return 910, None  # 未找到随机密码
+        
+        random_key = result[0]
+        return 700, random_key
+
+
+def set_user_as_admin(userid: int) -> int:
+    """
+    将指定用户设置为管理员（会员等级提升到 5）。
+    :param userid: 用户ID
+    :return: status
+    """
+    try:
+        connection.ping()
+        cursor.execute("UPDATE user_basic_info SET vip_level = 5 WHERE userid = %s", (userid,))
+        connection.commit()
+        return 700
+    except Exception:
+        connection.rollback()
+        return 500

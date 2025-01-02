@@ -14,4 +14,11 @@ smsg = {
     "user_not_found": "Target user does not exist or school ID is incorrect.",
     "user_already_verified": "User is already verified.",
     "permission_denied": "Permission denied. You cannot perform this operation.",
+    "admin_user_not_found": "This admin user can't be found by the token.",
+    "invalid_schoolid": "Invalid School ID",
+    "invalid_schoolid_desc": "Your school ID must start with '25' to post the yearbook entry.",
+    "already_posted": "Duplicate Entry",
+    "already_posted_desc": "You have already posted a yearbook entry and cannot post again.",
+    "txl_posted_success": "Yearbook Entry Posted Successfully",
+    "invalid_token": "Invalid login token. Please login again."
 }
